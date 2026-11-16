@@ -1,5 +1,8 @@
 # Engenharia da Saúde · Gestão de Home Care
 
+**Site publicado:** https://mdudanasci.github.io/engenharia-da-saude/
+**Repositório:** https://github.com/mdudanasci/engenharia-da-saude
+
 Sistema web para organizar o fluxo administrativo do atendimento domiciliar:
 
 - **Técnicas de enfermagem** (profissionais) com ficha completa: identidade, CPF/RG, COREN, contato, valor do plantão e status.
