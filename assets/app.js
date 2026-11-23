@@ -159,6 +159,19 @@
   }
 
   /* ---------------- Persistência ---------------- */
+  function defaultSheet() {
+    return {
+      columns: [
+        { id: uid('col_'), name: 'Caderno' },
+        { id: uid('col_'), name: 'Paciente' },
+        { id: uid('col_'), name: 'Responsável' },
+        { id: uid('col_'), name: 'Data' },
+        { id: uid('col_'), name: 'Observações' }
+      ],
+      rows: []
+    };
+  }
+
   function defaultNotebooks(d) {
     const patients = (d.patients || []).filter((p) => p.status === 'ativo');
     const techs = (d.technicians || []).filter((t) => t.status === 'ativo');
@@ -181,7 +194,8 @@
       if (raw) {
         const d = JSON.parse(raw);
         if (d && Array.isArray(d.patients) && Array.isArray(d.technicians) && Array.isArray(d.shifts)) {
-          if (!Array.isArray(d.notebooks)) d.notebooks = defaultNotebooks(d);
+          if (!d.sheet || !Array.isArray(d.sheet.columns)) d.sheet = defaultSheet();
+          if (!Array.isArray(d.sheet.rows)) d.sheet.rows = [];
           return d;
         }
       }
@@ -225,17 +239,29 @@
   }
   function sessionUser() {
     try {
-      const raw = localStorage.getItem(SESSION_KEY);
+      const raw = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
       if (!raw) return null;
       const s = JSON.parse(raw);
       return loadUsers().find((u) => u.id === s.userId) || null;
     } catch (err) { return null; }
   }
-  function setSession(user) {
-    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: user.id, at: new Date().toISOString() })); } catch (err) { /* ignora */ }
+  function setSession(user, remember = true) {
+    const payload = JSON.stringify({ userId: user.id, at: new Date().toISOString() });
+    try {
+      if (remember) {
+        localStorage.setItem(SESSION_KEY, payload);
+        sessionStorage.removeItem(SESSION_KEY);
+      } else {
+        sessionStorage.setItem(SESSION_KEY, payload);
+        localStorage.removeItem(SESSION_KEY);
+      }
+    } catch (err) { /* ignora */ }
   }
   function clearSession() {
-    try { localStorage.removeItem(SESSION_KEY); } catch (err) { /* ignora */ }
+    try {
+      localStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch (err) { /* ignora */ }
   }
   function randomSalt() {
     const arr = new Uint8Array(12);
@@ -315,6 +341,7 @@
               <div class="field"><label>Telefone</label><input name="phone" placeholder="(51) 99999-9999" /></div>` : ''}
             <div class="field"><label>Senha</label><input name="password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="mínimo 6 caracteres" /></div>
             ${isRegister ? `<div class="field"><label>Confirmar senha</label><input name="password2" type="password" autocomplete="new-password" placeholder="repita a senha" /></div>` : ''}
+            <label class="check-row auth-remember"><input type="checkbox" name="remember" checked /> Manter conectado neste dispositivo</label>
             <button class="btn btn-primary btn-lg btn-block" type="submit">${first ? 'Criar conta e entrar' : isRegister ? 'Criar conta' : 'Entrar'}</button>
           </form>
 
@@ -347,7 +374,7 @@
         if (!data.password) { authFail('Informe sua senha.'); return; }
         const hash = await hashPassword(data.password, user.salt);
         if (hash !== user.hash) { authFail('Senha incorreta. Tente novamente.'); return; }
-        setSession(user);
+        setSession(user, form.elements.remember ? form.elements.remember.checked : true);
         enterApp(user);
         return;
       }
@@ -366,7 +393,7 @@
       };
       users.push(user);
       if (!saveUsers(users)) return;
-      setSession(user);
+      setSession(user, form.elements.remember ? form.elements.remember.checked : true);
       enterApp(user);
     });
   }
@@ -536,12 +563,7 @@
       technicians: T,
       patients: P,
       shifts,
-      notebooks: [
-        { id: 'nb1', name: 'Caderno de sinais vitais', patientId: 'p1', technicianId: 'f1', start: `${ym}-01`, status: 'Em uso', notes: 'Aferições diárias · manhã e noite', files: [], createdAt: todayISO() },
-        { id: 'nb2', name: 'Caderno de medicações', patientId: 'p2', technicianId: 'f6', start: `${ym}-01`, status: 'Em uso', notes: 'Conferência de horários e doses', files: [], createdAt: todayISO() },
-        { id: 'nb3', name: 'Caderno de curativos', patientId: 'p3', technicianId: 'f10', start: `${ym}-01`, status: 'Conferido', notes: 'Evolução das feridas', files: [], createdAt: todayISO() },
-        { id: 'nb4', name: 'Pasta de exames', patientId: 'p1', technicianId: 'f2', start: `${ym}-01`, status: 'Arquivado', notes: 'Exames de outubro', files: [], createdAt: todayISO() }
-      ],
+      sheet: defaultSheet(),
       activity: [
         { id: 'l1', kind: 'add', text: 'Escala de <strong>Ada Santana</strong> importada da planilha de setembro.', at: new Date(Date.now() - 14 * 60000).toISOString() },
         { id: 'l2', kind: 'check', text: 'Plantões de <strong>Celia Borba</strong> conferidos — 60 plantões no mês.', at: new Date(Date.now() - 52 * 60000).toISOString() },
@@ -1261,7 +1283,7 @@
      ========================================================= */
   const NOTEBOOK_STATUS = ['Em uso', 'Conferido', 'Arquivado', 'Pendente'];
 
-  function viewNotebooks() {
+  function viewNotebooksLegacy() {
     const d = state.data;
     const q = state.notebookQuery.trim().toLowerCase();
     let list = (d.notebooks || []).slice();
@@ -1345,6 +1367,70 @@
       <section class="card">${table}</section>
 
       <div class="nb-hint">${icon('camera')} Para escanear, use o ícone de câmera na coluna <strong>Arquivos</strong>. As imagens ficam salvas neste navegador (não vão para a nuvem).</div>`;
+  }
+
+  /* =========================================================
+     CADERNOS · planilha livre (estilo Excel)
+     ========================================================= */
+  function viewNotebooks() {
+    const sheet = state.data.sheet || defaultSheet();
+    const cols = sheet.columns;
+    const rows = sheet.rows;
+    const totalFiles = rows.reduce((sum, r) => sum + (r.files || []).length, 0);
+
+    const headCells = cols.map((c) => `<th class="ex-th">
+        <div class="ex-th-inner">
+          <input class="ex-head-input" data-col-name="${c.id}" value="${esc(c.name)}" placeholder="Coluna" />
+          <button class="ex-del" data-action="delete-column" data-col="${c.id}" title="Excluir coluna">${icon('x')}</button>
+        </div>
+      </th>`).join('');
+
+    const bodyRows = rows.length ? rows.map((r, i) => `<tr>
+        <td class="ex-rownum">
+          <span>${i + 1}</span>
+          <button class="ex-del rownum" data-action="delete-row" data-row="${r.id}" title="Excluir linha">${icon('x')}</button>
+        </td>
+        ${cols.map((c) => `<td class="ex-cell-td"><input class="ex-cell" data-row-id="${r.id}" data-col-id="${c.id}" value="${esc(r.values?.[c.id] ?? '')}" /></td>`).join('')}
+        <td class="ex-files">
+          <button class="file-chip ${(r.files || []).length ? '' : 'empty'}" data-action="open-row-files" data-row="${r.id}" title="Ver arquivos escaneados">${icon('file')} ${(r.files || []).length}</button>
+          <button class="act-btn" data-action="scan-row" data-row="${r.id}" title="Escanear documento">${icon('camera')}</button>
+        </td>
+      </tr>`).join('') : `<tr class="ex-empty"><td colspan="${cols.length + 2}">Planilha em branco. Clique em <strong>Adicionar linha</strong> para começar.</td></tr>`;
+
+    return `
+      ${pageHead({
+        eyebrow: 'Organização de documentos',
+        title: 'Cadernos <em>da equipe</em>',
+        sub: 'Planilha livre, como no Excel: digite nas células, adicione ou remova linhas e colunas. Tudo é salvo automaticamente.',
+        actions: `<button class="btn btn-ghost" data-action="export-notebooks">${icon('download')} Exportar</button>
+                  <button class="btn btn-ghost" data-action="add-column">${icon('plus')} Nova coluna</button>
+                  <button class="btn btn-primary" data-action="add-row">${icon('plus')} Nova linha</button>`
+      })}
+
+      <div class="summary-bar" style="margin-bottom:14px">
+        <span class="sum-pill"><b>${rows.length}</b> linha(s)</span>
+        <span class="sum-pill"><b>${cols.length}</b> coluna(s)</span>
+        <span class="sum-pill"><span class="pdot" style="background:#e81f76"></span> <b>${totalFiles}</b> arquivo(s) escaneado(s)</span>
+      </div>
+
+      <div class="excel-card">
+        <div class="excel-scroll">
+          <table class="excel">
+            <thead><tr>
+              <th class="ex-corner"></th>
+              ${headCells}
+              <th class="ex-th ex-files-th"><div class="ex-th-inner"><span>Anexos</span></div></th>
+            </tr></thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+        <div class="excel-foot">
+          <button class="link-btn" data-action="add-row">${icon('plus')} Adicionar linha</button>
+          <button class="link-btn" data-action="add-column">${icon('plus')} Adicionar coluna</button>
+          <span class="spacer"></span>
+          <span class="excel-hint">${icon('sparkles')} Salva sozinho · câmera para escanear</span>
+        </div>
+      </div>`;
   }
 
   /* =========================================================
@@ -1629,6 +1715,11 @@
   }
 
   /* ---------- Cadernos: arquivos e scanner ---------- */
+  function getRow(id) { return (state.data.sheet?.rows || []).find((r) => r.id === id); }
+  function rowLabel(row) {
+    const values = Object.values(row?.values || {}).map((v) => String(v || '').trim()).filter(Boolean);
+    return values[0] || 'linha sem título';
+  }
   function getNotebook(id) { return (state.data.notebooks || []).find((n) => n.id === id); }
 
   let idbPromise = null;
@@ -1677,6 +1768,69 @@
     });
   }
 
+  function addSheetRow() {
+    if (!state.data.sheet) state.data.sheet = defaultSheet();
+    const row = { id: uid('row_'), values: {}, files: [] };
+    state.data.sheet.rows.push(row);
+    save(); render();
+    setTimeout(() => {
+      const firstCol = state.data.sheet.columns[0];
+      const el = document.querySelector(`[data-row-id="${row.id}"][data-col-id="${firstCol.id}"]`);
+      if (el) el.focus();
+    }, 60);
+  }
+
+  function addSheetColumn() {
+    if (!state.data.sheet) state.data.sheet = defaultSheet();
+    const col = { id: uid('col_'), name: `Coluna ${state.data.sheet.columns.length + 1}` };
+    state.data.sheet.columns.push(col);
+    save(); render();
+    setTimeout(() => {
+      const el = document.querySelector(`[data-col-name="${col.id}"]`);
+      if (el) { el.focus(); el.select(); }
+    }, 60);
+  }
+
+  function deleteSheetRow(id) {
+    const row = getRow(id);
+    if (!row) return;
+    const hasContent = Object.values(row.values || {}).some((v) => String(v || '').trim()) || (row.files || []).length > 0;
+    confirmDialog({
+      title: 'Excluir linha?',
+      message: hasContent ? 'Esta linha tem conteúdo ou arquivos e será removida.' : 'A linha em branco será removida.',
+      onConfirm() {
+        (row.files || []).forEach((f) => { idbDel(f.id).catch(() => {}); });
+        state.data.sheet.rows = state.data.sheet.rows.filter((r) => r.id !== id);
+        save(); closeModal(); render();
+        toast('Linha excluída.', 'info');
+      }
+    });
+  }
+
+  function deleteSheetColumn(id) {
+    const sheet = state.data.sheet;
+    if (!sheet) return;
+    if (sheet.columns.length <= 1) {
+      toast('A planilha precisa de pelo menos uma coluna.', 'info');
+      return;
+    }
+    const col = sheet.columns.find((c) => c.id === id);
+    if (!col) return;
+    const hasData = sheet.rows.some((r) => String(r.values?.[id] || '').trim());
+    confirmDialog({
+      title: 'Excluir coluna?',
+      message: hasData
+        ? `A coluna "${esc(col.name)}" tem dados e será removida.`
+        : `A coluna "${esc(col.name)}" será removida.`,
+      onConfirm() {
+        sheet.columns = sheet.columns.filter((c) => c.id !== id);
+        sheet.rows.forEach((r) => { if (r.values) delete r.values[id]; });
+        save(); closeModal(); render();
+        toast('Coluna excluída.', 'info');
+      }
+    });
+  }
+
   function addNotebook() {
     if (!Array.isArray(state.data.notebooks)) state.data.notebooks = [];
     const nb = {
@@ -1708,17 +1862,21 @@
   }
 
   function exportNotebooks() {
-    const rows = [['Nº', 'Caderno', 'Paciente', 'Responsável', 'Início', 'Situação', 'Observações', 'Arquivos']];
-    (state.data.notebooks || []).forEach((n, i) => rows.push([
-      i + 1, n.name, getPatient(n.patientId)?.name || '', getTech(n.technicianId)?.name || '',
-      fmtDate(n.start), n.status, n.notes, (n.files || []).length
-    ]));
+    const sheet = state.data.sheet || defaultSheet();
+    const head = sheet.columns.map((c) => c.name || '');
+    head.push('Arquivos');
+    const rows = [head];
+    sheet.rows.forEach((r) => {
+      const line = sheet.columns.map((c) => r.values?.[c.id] ?? '');
+      line.push((r.files || []).length);
+      rows.push(line);
+    });
     download(`cadernos-engenharia-da-saude-${todayISO()}.csv`, csv(rows), 'text/csv;charset=utf-8');
-    toast('CSV de cadernos exportado.');
+    toast('Planilha exportada em CSV.');
   }
 
-  function openScanner(notebookId) {
-    const nb = getNotebook(notebookId);
+  function openScannerRow(rowId) {
+    const nb = getRow(rowId);
     if (!nb) return;
 
     let stream = null;
@@ -1738,7 +1896,7 @@
 
     openModal({
       title: 'Escanear documento',
-      subtitle: `Anexar ao caderno "${nb.name || 'sem nome'}"`,
+      subtitle: `Anexar à linha "${rowLabel(nb)}"`,
       iconName: 'scan', size: 'lg',
       body: `<div class="scan-tabs">
           <button class="active" data-scan-tab="camera">${icon('camera')} Câmera</button>
@@ -1873,7 +2031,7 @@
         stopCamera();
         closeModal();
         render();
-        toast(`${pages.length} arquivo(s) anexado(s) ao caderno.`);
+        toast(`${pages.length} arquivo(s) anexado(s) à linha.`);
       } catch (err) {
         console.error(err);
         toast('Não foi possível salvar os arquivos neste navegador.', 'error');
@@ -1883,12 +2041,12 @@
     });
   }
 
-  async function openNotebookFiles(notebookId) {
-    const nb = getNotebook(notebookId);
+  async function openRowFiles(rowId) {
+    const nb = getRow(rowId);
     if (!nb) return;
     const files = nb.files || [];
     if (!files.length) {
-      toast('Nenhum arquivo escaneado neste caderno.', 'info');
+      toast('Nenhum arquivo escaneado nesta linha.', 'info');
       return;
     }
 
@@ -1919,14 +2077,14 @@
           </div>
           <div class="file-actions">
             ${it.url ? `<a class="act-btn" href="${it.url}" target="_blank" rel="noopener" title="Abrir">${icon('chevron')}</a>` : ''}
-            <button class="act-btn danger" data-action="delete-file" data-nb="${nb.id}" data-file="${it.meta.id}" title="Excluir">${icon('trash')}</button>
+            <button class="act-btn danger" data-action="delete-file" data-row="${nb.id}" data-file="${it.meta.id}" title="Excluir">${icon('trash')}</button>
           </div>
         </div>`).join('')}
     </div>`;
 
     openModal({
-      title: 'Arquivos do caderno',
-      subtitle: `${nb.name || 'Sem nome'} · ${files.length} arquivo(s)`,
+      title: 'Arquivos da linha',
+      subtitle: `${rowLabel(nb)} · ${files.length} arquivo(s)`,
       iconName: 'file', size: 'lg', body,
       foot: `<button class="btn btn-primary" data-action="close-modal">Fechar</button>`
     });
@@ -2555,7 +2713,7 @@
             patients: parsed.patients,
             technicians: parsed.technicians,
             shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
-            notebooks: Array.isArray(parsed.notebooks) ? parsed.notebooks : [],
+            sheet: parsed.sheet && Array.isArray(parsed.sheet.columns) ? parsed.sheet : defaultSheet(),
             activity: parsed.activity || []
           };
           save(); closeModal(); render();
@@ -2666,21 +2824,22 @@
     'delete-technician': (el) => deleteTechnician(el.dataset.id),
     'filter-tech': (el) => { state.techFilter = el.dataset.value; render(); },
 
-    'new-notebook': () => addNotebook(),
-    'delete-notebook': (el) => deleteNotebook(el.dataset.id),
-    'scan-notebook': (el) => openScanner(el.dataset.id),
-    'open-notebook-files': (el) => openNotebookFiles(el.dataset.id),
+    'add-row': () => addSheetRow(),
+    'add-column': () => addSheetColumn(),
+    'delete-row': (el) => deleteSheetRow(el.dataset.row),
+    'delete-column': (el) => deleteSheetColumn(el.dataset.col),
+    'scan-row': (el) => openScannerRow(el.dataset.row),
+    'open-row-files': (el) => openRowFiles(el.dataset.row),
     'delete-file': async (el) => {
-      const nb = getNotebook(el.dataset.nb);
-      if (!nb) return;
-      nb.files = (nb.files || []).filter((f) => f.id !== el.dataset.file);
+      const row = getRow(el.dataset.row);
+      if (!row) return;
+      row.files = (row.files || []).filter((f) => f.id !== el.dataset.file);
       try { await idbDel(el.dataset.file); } catch (err) { /* ignora */ }
       save(); closeModal(); render();
       toast('Arquivo removido.', 'info');
-      openNotebookFiles(nb.id);
+      openRowFiles(row.id);
     },
     'export-notebooks': () => exportNotebooks(),
-    'clear-notebook-search': () => { state.notebookQuery = ''; render(); },
 
     'toggle-shift': (el) => {
       const techId = el.dataset.tech;
@@ -2802,7 +2961,7 @@
     if (crumb) crumb.textContent = CRUMBS[state.view] || 'Painel';
     const pCount = $('#navPatientCount'); if (pCount) pCount.textContent = state.data.patients.length;
     const tCount = $('#navTechCount'); if (tCount) tCount.textContent = state.data.technicians.length;
-    const nCount = $('#navNotebookCount'); if (nCount) nCount.textContent = (state.data.notebooks || []).length;
+    const nCount = $('#navNotebookCount'); if (nCount) nCount.textContent = (state.data.sheet?.rows || []).length;
 
     const me = sessionUser();
     const chip = $('.user-chip');
@@ -2867,12 +3026,18 @@
     const t = e.target;
     if (t.id === 'scalePatient') { state.scalePatientId = t.value; render(); return; }
 
-    if (t.dataset.nbField) {
-      const nb = getNotebook(t.dataset.nbId);
-      if (nb) {
-        nb[t.dataset.nbField] = t.value;
+    if (t.dataset.rowId && t.dataset.colId) {
+      const row = getRow(t.dataset.rowId);
+      if (row) {
+        row.values = row.values || {};
+        row.values[t.dataset.colId] = t.value;
         save();
       }
+      return;
+    }
+    if (t.dataset.colName) {
+      const col = (state.data.sheet?.columns || []).find((c) => c.id === t.dataset.colName);
+      if (col) { col.name = t.value; save(); }
       return;
     }
 
@@ -2924,8 +3089,40 @@
     }
   });
 
+  function storageAvailable() {
+    try {
+      const k = '__es_test__';
+      localStorage.setItem(k, '1');
+      localStorage.removeItem(k);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  window.addEventListener('storage', (e) => {
+    if (e.key === KEY && e.newValue) {
+      try {
+        const data = JSON.parse(e.newValue);
+        if (!data.sheet || !Array.isArray(data.sheet.columns)) data.sheet = defaultSheet();
+        state.data = data;
+        render();
+        toast('Dados atualizados em outra aba.', 'info');
+      } catch (err) { /* ignora */ }
+    }
+    if (e.key === SESSION_KEY && !e.newValue && !sessionStorage.getItem(SESSION_KEY)) {
+      renderAuth('login');
+    }
+  });
+
   ensureSearchPop();
   try { localStorage.removeItem('engenhariaSaude.admin.v1'); } catch (e) { /* versão anterior */ }
+  if (!storageAvailable()) {
+    const warn = document.createElement('div');
+    warn.className = 'storage-warning';
+    warn.innerHTML = `${icon('alert')} Este navegador está bloqueando o armazenamento local. As alterações não serão salvas — saia do modo privado/anônimo ou libere cookies para este site.`;
+    document.body.appendChild(warn);
+  }
   if (sessionUser()) {
     $('.app').hidden = false;
     render();
