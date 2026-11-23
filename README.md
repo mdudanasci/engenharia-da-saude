@@ -68,6 +68,7 @@ O que já vem carregado é uma demonstração com os dados das planilhas de **Ad
 | --- | --- |
 | **Painel** | Pacientes, técnicas, plantões e custo do mês; plantões de hoje; modalidades; **calendário com datas comemorativas** (Dia do Enfermeiro, Dia do Idoso, etc.); últimos 7 dias |
 | **Escalas** | Planilha mensal por paciente com navegação de mês, totais por técnica/dia, OBS e clique nas células |
+| **Cadernos** | Planilha de organização dos cadernos (paciente, responsável, situação, observações) + **scanner** pela câmera ou arquivo, com os documentos guardados na própria área |
 | **Pacientes** | Cadastro, modalidade 12h/24h, equipe de 2 ou 4 técnicas, escala e custo do mês |
 | **Técnicas** | Ficha com identidade, COREN, contato, valor do plantão, pacientes e plantões do mês |
 | **Relatórios** | Custo por paciente, plantões por técnica, modalidades e exportações |
@@ -75,9 +76,12 @@ O que já vem carregado é uma demonstração com os dados das planilhas de **Ad
 ### Atalhos e interações
 
 - **Clique na célula da escala**: Diurno → Noturno → 24h → limpar.
+- **Cadernos**: clique em qualquer célula da tabela para editar (salva sozinho). No ícone da câmera você escaneia páginas pela webcam ou envia fotos/PDF.
 - **/**: foca a busca global.
 - **Esc**: fecha modal, busca ou menu.
 - Arraste a planilha na horizontal para ver todos os dias do mês.
+
+> Os documentos escaneados ficam salvos no navegador (IndexedDB) e **não entram no backup JSON**. Para a equipe acessar os mesmos arquivos de outros computadores, é necessário o modo nuvem.
 
 ---
 
