@@ -54,11 +54,14 @@ O que já vem carregado é uma demonstração com os dados das planilhas de **Ad
 ## Acesso ao sistema
 
 - No **primeiro acesso** deste navegador, o sistema pede a criação da **conta de administração** (nome, e-mail, função e senha).
+- Marque **“Manter conectado neste dispositivo”** para não precisar entrar de novo a cada visita.
 - Depois, outras pessoas podem clicar em **“Criar conta”** na tela de entrada e fazer o próprio cadastro.
 - Clique no seu avatar (canto superior direito) para abrir **Meu cadastro**: alterar nome, função, telefone, COREN, e-mail e senha.
 - No mesmo menu há **Sair da conta**.
 
-> **Importante:** este é um acesso **local**. As contas e os dados ficam salvos apenas neste navegador/computador. Para a equipe entrar de outros computadores com a mesma escala, é necessário o modo nuvem (Supabase) — posso configurar quando quiser.
+> **Importante:** use sempre o **mesmo endereço** para abrir o site (o atalho `Abrir site.bat` já abre o link publicado). Endereços diferentes (localhost, GitHub, outro navegador) têm dados e login separados.
+
+> Este é um acesso **local**. As contas e os dados ficam salvos no navegador deste computador. Para a equipe entrar de outros computadores com a mesma escala, é necessário o modo nuvem (Supabase).
 
 ---
 
@@ -68,7 +71,7 @@ O que já vem carregado é uma demonstração com os dados das planilhas de **Ad
 | --- | --- |
 | **Painel** | Pacientes, técnicas, plantões e custo do mês; plantões de hoje; modalidades; **calendário com datas comemorativas** (Dia do Enfermeiro, Dia do Idoso, etc.); últimos 7 dias |
 | **Escalas** | Planilha mensal por paciente com navegação de mês, totais por técnica/dia, OBS e clique nas células |
-| **Cadernos** | Planilha de organização dos cadernos (paciente, responsável, situação, observações) + **scanner** pela câmera ou arquivo, com os documentos guardados na própria área |
+| **Cadernos** | Planilha livre tipo Excel: adicione/remova **linhas e colunas**, renomeie os cabeçalhos e digite direto nas células (salva sozinho). Cada linha aceita documentos escaneados |
 | **Pacientes** | Cadastro, modalidade 12h/24h, equipe de 2 ou 4 técnicas, escala e custo do mês |
 | **Técnicas** | Ficha com identidade, COREN, contato, valor do plantão, pacientes e plantões do mês |
 | **Relatórios** | Custo por paciente, plantões por técnica, modalidades e exportações |
