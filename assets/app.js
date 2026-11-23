@@ -159,12 +159,31 @@
   }
 
   /* ---------------- Persistência ---------------- */
+  function defaultNotebooks(d) {
+    const patients = (d.patients || []).filter((p) => p.status === 'ativo');
+    const techs = (d.technicians || []).filter((t) => t.status === 'ativo');
+    const mk = (name, pi, ti, status, notes) => ({
+      id: uid('nb_'), name,
+      patientId: patients[pi]?.id || '', technicianId: techs[ti]?.id || '',
+      start: todayISO(), status, notes, files: [], createdAt: todayISO()
+    });
+    return [
+      mk('Caderno de sinais vitais', 0, 0, 'Em uso', 'Aferições diárias'),
+      mk('Caderno de medicações', 1, 1, 'Em uso', 'Conferência de horários'),
+      mk('Caderno de curativos', 2, 2, 'Conferido', 'Evolução das feridas'),
+      mk('Pasta de exames', 0, 3, 'Arquivado', 'Exames do mês')
+    ];
+  }
+
   function loadData() {
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const d = JSON.parse(raw);
-        if (d && Array.isArray(d.patients) && Array.isArray(d.technicians) && Array.isArray(d.shifts)) return d;
+        if (d && Array.isArray(d.patients) && Array.isArray(d.technicians) && Array.isArray(d.shifts)) {
+          if (!Array.isArray(d.notebooks)) d.notebooks = defaultNotebooks(d);
+          return d;
+        }
       }
     } catch (err) {
       console.warn('Não foi possível ler os dados salvos.', err);
@@ -517,6 +536,12 @@
       technicians: T,
       patients: P,
       shifts,
+      notebooks: [
+        { id: 'nb1', name: 'Caderno de sinais vitais', patientId: 'p1', technicianId: 'f1', start: `${ym}-01`, status: 'Em uso', notes: 'Aferições diárias · manhã e noite', files: [], createdAt: todayISO() },
+        { id: 'nb2', name: 'Caderno de medicações', patientId: 'p2', technicianId: 'f6', start: `${ym}-01`, status: 'Em uso', notes: 'Conferência de horários e doses', files: [], createdAt: todayISO() },
+        { id: 'nb3', name: 'Caderno de curativos', patientId: 'p3', technicianId: 'f10', start: `${ym}-01`, status: 'Conferido', notes: 'Evolução das feridas', files: [], createdAt: todayISO() },
+        { id: 'nb4', name: 'Pasta de exames', patientId: 'p1', technicianId: 'f2', start: `${ym}-01`, status: 'Arquivado', notes: 'Exames de outubro', files: [], createdAt: todayISO() }
+      ],
       activity: [
         { id: 'l1', kind: 'add', text: 'Escala de <strong>Ada Santana</strong> importada da planilha de setembro.', at: new Date(Date.now() - 14 * 60000).toISOString() },
         { id: 'l2', kind: 'check', text: 'Plantões de <strong>Celia Borba</strong> conferidos — 60 plantões no mês.', at: new Date(Date.now() - 52 * 60000).toISOString() },
@@ -539,6 +564,7 @@
     patientFilter: 'todos',
     techQuery: '',
     techFilter: 'ativos',
+    notebookQuery: '',
     selectedPatients: new Set(),
     selectedTechs: new Set(),
     importRows: [],
@@ -1231,6 +1257,97 @@
   }
 
   /* =========================================================
+     CADERNOS · organização + documentos escaneados
+     ========================================================= */
+  const NOTEBOOK_STATUS = ['Em uso', 'Conferido', 'Arquivado', 'Pendente'];
+
+  function viewNotebooks() {
+    const d = state.data;
+    const q = state.notebookQuery.trim().toLowerCase();
+    let list = (d.notebooks || []).slice();
+    if (q) {
+      list = list.filter((n) => [n.name, getPatient(n.patientId)?.name, getTech(n.technicianId)?.name, n.notes, n.status].join(' ').toLowerCase().includes(q));
+    }
+    const patients = d.patients.filter((p) => p.status === 'ativo');
+    const techs = d.technicians.filter((t) => t.status === 'ativo');
+    const totalFiles = (d.notebooks || []).reduce((sum, n) => sum + (n.files || []).length, 0);
+    const inUse = (d.notebooks || []).filter((n) => n.status === 'Em uso').length;
+
+    const rows = list.map((n, i) => {
+      const files = n.files || [];
+      return `<tr data-id="${n.id}">
+        <td class="nb-num">${i + 1}</td>
+        <td class="nb-name"><input class="cell-input" data-nb-id="${n.id}" data-nb-field="name" value="${esc(n.name)}" placeholder="Nome do caderno" /></td>
+        <td>
+          <select class="cell-input" data-nb-id="${n.id}" data-nb-field="patientId">
+            <option value="">—</option>
+            ${patients.map((p) => `<option value="${p.id}" ${n.patientId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+          </select>
+        </td>
+        <td>
+          <select class="cell-input" data-nb-id="${n.id}" data-nb-field="technicianId">
+            <option value="">—</option>
+            ${techs.map((t) => `<option value="${t.id}" ${n.technicianId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+          </select>
+        </td>
+        <td><input type="date" class="cell-input" data-nb-id="${n.id}" data-nb-field="start" value="${esc(n.start || '')}" /></td>
+        <td>
+          <select class="cell-input" data-nb-id="${n.id}" data-nb-field="status">
+            ${NOTEBOOK_STATUS.map((s) => `<option ${n.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </td>
+        <td><input class="cell-input" data-nb-id="${n.id}" data-nb-field="notes" value="${esc(n.notes || '')}" placeholder="Anotações" /></td>
+        <td class="nb-files">
+          <button class="file-chip ${files.length ? '' : 'empty'}" data-action="open-notebook-files" data-id="${n.id}" title="Ver arquivos escaneados">${icon('file')} ${files.length}</button>
+          <button class="act-btn" data-action="scan-notebook" data-id="${n.id}" title="Escanear documento">${icon('camera')}</button>
+        </td>
+        <td class="nb-actions">
+          <button class="act-btn danger" data-action="delete-notebook" data-id="${n.id}" title="Excluir caderno">${icon('trash')}</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const table = list.length ? `<div class="table-wrap"><table class="data nb-table">
+      <thead><tr>
+        <th class="nb-num">Nº</th><th>Caderno</th><th>Paciente</th><th>Responsável</th><th>Início</th><th>Situação</th><th>Observações</th><th>Arquivos</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>` : emptyState({
+      iconName: q ? 'search' : 'book',
+      title: q ? 'Nenhum caderno encontrado' : 'Nenhum caderno por aqui',
+      text: q ? `Não encontramos resultados para "${q}".` : 'Crie o primeiro caderno ou escaneie um documento para começar.',
+      action: q
+        ? `<button class="btn btn-ghost btn-sm" data-action="clear-notebook-search">Limpar busca</button>`
+        : `<button class="btn btn-primary btn-sm" data-action="new-notebook">${icon('plus')} Novo caderno</button>`
+    });
+
+    return `
+      ${pageHead({
+        eyebrow: 'Organização de documentos',
+        title: 'Cadernos <em>da equipe</em>',
+        sub: 'Planilha editável para organizar os cadernos de cada paciente — clique nas células para preencher. Escaneie documentos e guarde tudo aqui.',
+        actions: `<button class="btn btn-ghost" data-action="export-notebooks">${icon('download')} Exportar</button>
+                  <button class="btn btn-primary" data-action="new-notebook">${icon('plus')} Novo caderno</button>`
+      })}
+
+      <div class="summary-bar" style="margin-bottom:16px">
+        <span class="sum-pill"><b>${(d.notebooks || []).length}</b> cadernos</span>
+        <span class="sum-pill"><span class="pdot" style="background:#2a86d8"></span> <b>${inUse}</b> em uso</span>
+        <span class="sum-pill"><span class="pdot" style="background:#e81f76"></span> <b>${totalFiles}</b> arquivo(s) escaneado(s)</span>
+      </div>
+
+      <div class="toolbar">
+        <label class="field-search">${icon('search')}<input id="notebookSearch" placeholder="Buscar caderno, paciente..." value="${esc(state.notebookQuery)}" autocomplete="off" /></label>
+        <span class="spacer"></span>
+        <span class="sum-pill">${list.length} exibido${list.length === 1 ? '' : 's'}</span>
+      </div>
+
+      <section class="card">${table}</section>
+
+      <div class="nb-hint">${icon('camera')} Para escanear, use o ícone de câmera na coluna <strong>Arquivos</strong>. As imagens ficam salvas neste navegador (não vão para a nuvem).</div>`;
+  }
+
+  /* =========================================================
      RELATÓRIOS
      ========================================================= */
   function viewReports() {
@@ -1318,7 +1435,13 @@
     if (first) setTimeout(() => first.focus({ preventScroll: true }), 80);
   }
 
+  let modalCleanup = null;
+
   function closeModal() {
+    if (modalCleanup) {
+      try { modalCleanup(); } catch (err) { /* ignora */ }
+      modalCleanup = null;
+    }
     $('#modalRoot').innerHTML = '';
     document.body.style.overflow = '';
   }
@@ -1502,6 +1625,310 @@
              <span class="spacer"></span>
              <button class="btn btn-ghost" data-action="edit-technician" data-id="${t.id}">${icon('edit')} Editar</button>
              <button class="btn btn-primary" data-action="open-scale-tech" data-id="${t.id}">${icon('table')} Ver escala</button>`
+    });
+  }
+
+  /* ---------- Cadernos: arquivos e scanner ---------- */
+  function getNotebook(id) { return (state.data.notebooks || []).find((n) => n.id === id); }
+
+  let idbPromise = null;
+  function idbOpen() {
+    if (!window.indexedDB) return Promise.reject(new Error('IndexedDB indisponível'));
+    if (idbPromise) return idbPromise;
+    idbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open('engenhariaArquivos', 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('arquivos')) db.createObjectStore('arquivos');
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return idbPromise;
+  }
+
+  async function idbPut(id, blob) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('arquivos', 'readwrite');
+      tx.objectStore('arquivos').put(blob, id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function idbGet(id) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('arquivos', 'readonly');
+      const req = tx.objectStore('arquivos').get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbDel(id) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('arquivos', 'readwrite');
+      tx.objectStore('arquivos').delete(id);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  function addNotebook() {
+    if (!Array.isArray(state.data.notebooks)) state.data.notebooks = [];
+    const nb = {
+      id: uid('nb_'), name: '', patientId: '', technicianId: '',
+      start: todayISO(), status: 'Em uso', notes: '', files: [], createdAt: new Date().toISOString()
+    };
+    state.data.notebooks.push(nb);
+    save(); render();
+    setTimeout(() => {
+      const el = document.querySelector(`[data-nb-id="${nb.id}"][data-nb-field="name"]`);
+      if (el) el.focus();
+    }, 60);
+  }
+
+  function deleteNotebook(id) {
+    const nb = getNotebook(id);
+    if (!nb) return;
+    confirmDialog({
+      title: 'Excluir caderno?',
+      message: `O caderno <strong>${esc(nb.name || 'sem nome')}</strong> e os arquivos anexados serão removidos.`,
+      onConfirm() {
+        (nb.files || []).forEach((f) => { idbDel(f.id).catch(() => {}); });
+        state.data.notebooks = state.data.notebooks.filter((n) => n.id !== id);
+        log('alert', `Caderno <strong>${esc(nb.name || 'sem nome')}</strong> removido.`);
+        save(); closeModal(); render();
+        toast('Caderno excluído.', 'info');
+      }
+    });
+  }
+
+  function exportNotebooks() {
+    const rows = [['Nº', 'Caderno', 'Paciente', 'Responsável', 'Início', 'Situação', 'Observações', 'Arquivos']];
+    (state.data.notebooks || []).forEach((n, i) => rows.push([
+      i + 1, n.name, getPatient(n.patientId)?.name || '', getTech(n.technicianId)?.name || '',
+      fmtDate(n.start), n.status, n.notes, (n.files || []).length
+    ]));
+    download(`cadernos-engenharia-da-saude-${todayISO()}.csv`, csv(rows), 'text/csv;charset=utf-8');
+    toast('CSV de cadernos exportado.');
+  }
+
+  function openScanner(notebookId) {
+    const nb = getNotebook(notebookId);
+    if (!nb) return;
+
+    let stream = null;
+    let pages = [];
+    const urls = [];
+
+    const stopCamera = () => {
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+      }
+    };
+    modalCleanup = () => {
+      stopCamera();
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+
+    openModal({
+      title: 'Escanear documento',
+      subtitle: `Anexar ao caderno "${nb.name || 'sem nome'}"`,
+      iconName: 'scan', size: 'lg',
+      body: `<div class="scan-tabs">
+          <button class="active" data-scan-tab="camera">${icon('camera')} Câmera</button>
+          <button data-scan-tab="file">${icon('file')} Arquivo</button>
+        </div>
+        <div class="scan-pane" id="scanCameraPane">
+          <div class="scan-video-wrap">
+            <video id="scanVideo" autoplay playsinline muted></video>
+            <div class="scan-empty" id="scanEmpty">${icon('camera')}<p>Clique em <strong>Ativar câmera</strong> e posicione o documento na frente dela.</p></div>
+          </div>
+          <div class="scan-actions">
+            <button class="btn btn-ghost btn-sm" id="scanStart">${icon('camera')} Ativar câmera</button>
+            <button class="btn btn-soft btn-sm" id="scanCapture" disabled>${icon('scan')} Capturar página</button>
+          </div>
+          <p class="scan-hint">Dica: luz por cima, documento apoiado na mesa e enquadrado inteiro.</p>
+        </div>
+        <div class="scan-pane" id="scanFilePane" hidden>
+          <label class="scan-drop">
+            <input type="file" id="scanInput" accept="image/*,application/pdf" multiple hidden />
+            ${icon('upload')}
+            <strong>Escolher arquivos</strong>
+            <span>Imagens (JPG/PNG) ou PDF · até 10 MB cada</span>
+          </label>
+        </div>
+        <div class="scan-preview" id="scanPreview"></div>`,
+      foot: `<span class="scan-count" id="scanCount">0 página(s)</span><span class="spacer"></span>
+             <button class="btn btn-ghost" data-action="close-modal">Cancelar</button>
+             <button class="btn btn-primary" id="scanSave" disabled>${icon('check')} Salvar anexos</button>`
+    });
+
+    const video = $('#scanVideo');
+    const startBtn = $('#scanStart');
+    const captureBtn = $('#scanCapture');
+    const preview = $('#scanPreview');
+    const saveBtn = $('#scanSave');
+    const countEl = $('#scanCount');
+
+    const renderPreview = () => {
+      preview.innerHTML = pages.map((p, i) => `
+        <div class="scan-thumb">
+          ${p.type && p.type.startsWith('image') ? `<img src="${p.url}" alt="" />` : `<span class="pdf-icon">PDF</span>`}
+          <button class="scan-remove" data-remove="${i}" title="Remover">×</button>
+          <small>${esc(p.name)}</small>
+        </div>`).join('');
+      countEl.textContent = `${pages.length} página(s)`;
+      saveBtn.disabled = pages.length === 0;
+    };
+
+    const addPage = (blob, name) => {
+      const url = URL.createObjectURL(blob);
+      urls.push(url);
+      pages.push({ blob, name, type: blob.type || 'image/jpeg', url });
+      renderPreview();
+    };
+
+    $$('[data-scan-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        $$('[data-scan-tab]').forEach((b) => b.classList.toggle('active', b === btn));
+        $('#scanCameraPane').hidden = btn.dataset.scanTab !== 'camera';
+        $('#scanFilePane').hidden = btn.dataset.scanTab !== 'file';
+      });
+    });
+
+    startBtn.addEventListener('click', async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast('Este navegador não expõe a câmera. Use a aba "Arquivo".', 'error');
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+        $('#scanEmpty').hidden = true;
+        captureBtn.disabled = false;
+        startBtn.innerHTML = `${icon('camera')} Trocar câmera`;
+      } catch (err) {
+        toast('Não foi possível ligar a câmera. Autorize o acesso ou use a aba "Arquivo".', 'error');
+      }
+    });
+
+    captureBtn.addEventListener('click', () => {
+      if (!video.videoWidth) return;
+      const canvas = document.createElement('canvas');
+      const maxW = 1600;
+      const scale = Math.min(1, maxW / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        if (blob) addPage(blob, `pagina-${pages.length + 1}.jpg`);
+      }, 'image/jpeg', 0.85);
+    });
+
+    $('#scanInput').addEventListener('change', (e) => {
+      Array.from(e.target.files || []).forEach((file) => {
+        if (file.size > 10 * 1024 * 1024) { toast(`${file.name}: acima de 10 MB.`, 'error'); return; }
+        addPage(file, file.name);
+      });
+      e.target.value = '';
+    });
+
+    preview.addEventListener('click', (e) => {
+      const btn = e.target.closest('.scan-remove');
+      if (!btn) return;
+      const i = Number(btn.dataset.remove);
+      if (pages[i]) {
+        URL.revokeObjectURL(pages[i].url);
+        pages.splice(i, 1);
+        renderPreview();
+      }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      if (!pages.length) return;
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = 'Salvando...';
+      try {
+        for (const p of pages) {
+          const id = uid('file_');
+          await idbPut(id, p.blob);
+          nb.files = nb.files || [];
+          nb.files.push({
+            id, name: p.name, type: p.type, size: p.blob.size,
+            at: new Date().toISOString()
+          });
+        }
+        save();
+        stopCamera();
+        closeModal();
+        render();
+        toast(`${pages.length} arquivo(s) anexado(s) ao caderno.`);
+      } catch (err) {
+        console.error(err);
+        toast('Não foi possível salvar os arquivos neste navegador.', 'error');
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = `${icon('check')} Salvar anexos`;
+      }
+    });
+  }
+
+  async function openNotebookFiles(notebookId) {
+    const nb = getNotebook(notebookId);
+    if (!nb) return;
+    const files = nb.files || [];
+    if (!files.length) {
+      toast('Nenhum arquivo escaneado neste caderno.', 'info');
+      return;
+    }
+
+    const items = [];
+    const urls = [];
+    for (const f of files) {
+      let url = null;
+      try {
+        const blob = await idbGet(f.id);
+        if (blob) {
+          url = URL.createObjectURL(blob);
+          urls.push(url);
+        }
+      } catch (err) { /* ignora */ }
+      items.push({ meta: f, url });
+    }
+    modalCleanup = () => urls.forEach((u) => URL.revokeObjectURL(u));
+
+    const body = `<div class="file-grid">
+      ${items.map((it) => `
+        <div class="file-item">
+          <div class="file-thumb">
+            ${it.url && it.meta.type?.startsWith('image') ? `<img src="${it.url}" alt="" />` : `<span class="pdf-icon">${it.meta.type === 'application/pdf' ? 'PDF' : '?'}</span>`}
+          </div>
+          <div class="file-meta">
+            <strong>${esc(it.meta.name)}</strong>
+            <small>${Math.max(1, Math.round((it.meta.size || 0) / 1024))} KB · ${fmtDate((it.meta.at || '').slice(0, 10))}</small>
+          </div>
+          <div class="file-actions">
+            ${it.url ? `<a class="act-btn" href="${it.url}" target="_blank" rel="noopener" title="Abrir">${icon('chevron')}</a>` : ''}
+            <button class="act-btn danger" data-action="delete-file" data-nb="${nb.id}" data-file="${it.meta.id}" title="Excluir">${icon('trash')}</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+
+    openModal({
+      title: 'Arquivos do caderno',
+      subtitle: `${nb.name || 'Sem nome'} · ${files.length} arquivo(s)`,
+      iconName: 'file', size: 'lg', body,
+      foot: `<button class="btn btn-primary" data-action="close-modal">Fechar</button>`
     });
   }
 
@@ -2128,6 +2555,7 @@
             patients: parsed.patients,
             technicians: parsed.technicians,
             shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
+            notebooks: Array.isArray(parsed.notebooks) ? parsed.notebooks : [],
             activity: parsed.activity || []
           };
           save(); closeModal(); render();
@@ -2238,6 +2666,22 @@
     'delete-technician': (el) => deleteTechnician(el.dataset.id),
     'filter-tech': (el) => { state.techFilter = el.dataset.value; render(); },
 
+    'new-notebook': () => addNotebook(),
+    'delete-notebook': (el) => deleteNotebook(el.dataset.id),
+    'scan-notebook': (el) => openScanner(el.dataset.id),
+    'open-notebook-files': (el) => openNotebookFiles(el.dataset.id),
+    'delete-file': async (el) => {
+      const nb = getNotebook(el.dataset.nb);
+      if (!nb) return;
+      nb.files = (nb.files || []).filter((f) => f.id !== el.dataset.file);
+      try { await idbDel(el.dataset.file); } catch (err) { /* ignora */ }
+      save(); closeModal(); render();
+      toast('Arquivo removido.', 'info');
+      openNotebookFiles(nb.id);
+    },
+    'export-notebooks': () => exportNotebooks(),
+    'clear-notebook-search': () => { state.notebookQuery = ''; render(); },
+
     'toggle-shift': (el) => {
       const techId = el.dataset.tech;
       const date = el.dataset.date;
@@ -2306,12 +2750,13 @@
   };
 
   /* ---------------- Navegação e render ---------------- */
-  const VIEWS = ['dashboard', 'scales', 'patients', 'techniques', 'reports'];
-  const CRUMBS = { dashboard: 'Painel', scales: 'Escalas', patients: 'Pacientes', techniques: 'Técnicas', reports: 'Relatórios' };
+  const VIEWS = ['dashboard', 'scales', 'notebooks', 'patients', 'techniques', 'reports'];
+  const CRUMBS = { dashboard: 'Painel', scales: 'Escalas', notebooks: 'Cadernos', patients: 'Pacientes', techniques: 'Técnicas', reports: 'Relatórios' };
 
   const views = {
     dashboard: viewDashboard,
     scales: viewScales,
+    notebooks: viewNotebooks,
     patients: viewPatients,
     techniques: viewTechniques,
     reports: viewReports
@@ -2357,6 +2802,7 @@
     if (crumb) crumb.textContent = CRUMBS[state.view] || 'Painel';
     const pCount = $('#navPatientCount'); if (pCount) pCount.textContent = state.data.patients.length;
     const tCount = $('#navTechCount'); if (tCount) tCount.textContent = state.data.technicians.length;
+    const nCount = $('#navNotebookCount'); if (nCount) nCount.textContent = (state.data.notebooks || []).length;
 
     const me = sessionUser();
     const chip = $('.user-chip');
@@ -2413,12 +2859,22 @@
     const t = e.target;
     if (t.id === 'patientSearch') { state.patientQuery = t.value; render(); }
     else if (t.id === 'techSearch') { state.techQuery = t.value; render(); }
+    else if (t.id === 'notebookSearch') { state.notebookQuery = t.value; render(); }
     else if (t.id === 'globalSearch') { renderSearchPop(t.value); }
   });
 
   document.addEventListener('change', (e) => {
     const t = e.target;
     if (t.id === 'scalePatient') { state.scalePatientId = t.value; render(); return; }
+
+    if (t.dataset.nbField) {
+      const nb = getNotebook(t.dataset.nbId);
+      if (nb) {
+        nb[t.dataset.nbField] = t.value;
+        save();
+      }
+      return;
+    }
 
     if (t.dataset.selectPatient) {
       if (t.checked) state.selectedPatients.add(t.dataset.selectPatient);
