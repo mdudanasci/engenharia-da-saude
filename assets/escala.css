@@ -360,3 +360,64 @@ select.cell-input { cursor: pointer; }
 .file-meta strong { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .file-meta small { font-size: 9.5px; color: var(--muted-2); }
 .file-actions { display: flex; justify-content: flex-end; gap: 2px; padding: 0 6px 6px; }
+/* ---------- cadernos: planilha estilo Excel ---------- */
+.excel-card { background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
+.excel-scroll { overflow: auto; max-height: 62vh; }
+table.excel { border-collapse: separate; border-spacing: 0; min-width: 100%; width: max-content; }
+table.excel th, table.excel td { border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); background: #fff; padding: 0; }
+table.excel thead th { position: sticky; top: 0; z-index: 3; background: #fdfaf6; }
+table.excel .ex-corner { position: sticky; left: 0; z-index: 4; background: #f7f1e8; width: 44px; min-width: 44px; }
+.ex-th-inner { display: flex; align-items: center; gap: 2px; padding: 3px 4px 3px 7px; min-width: 150px; }
+.ex-th-inner span { font-size: 9.6px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; color: var(--muted-2); }
+.ex-head-input {
+  flex: 1; min-width: 0; border: 0; background: transparent; outline: none;
+  font-size: 10.6px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--ink-2); padding: 4px 2px; border-radius: 5px;
+}
+.ex-head-input:focus { background: #fff; box-shadow: inset 0 0 0 1px rgba(232, 31, 118, .35); }
+.ex-del {
+  width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center;
+  color: var(--muted-2); opacity: 0; transition: opacity .12s, background .12s, color .12s; flex: none;
+}
+.ex-del svg { width: 11px; height: 11px; }
+.ex-th:hover .ex-del, tr:hover .ex-del { opacity: 1; }
+.ex-del:hover { background: #fdeceb; color: #c93a2d; }
+.ex-rownum {
+  position: sticky; left: 0; z-index: 2; width: 44px; min-width: 44px;
+  background: #fdfaf6; text-align: center; color: var(--muted-2);
+  font-size: 10.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.ex-rownum span { display: inline-block; padding: 6px 0; }
+.ex-rownum .ex-del { margin: 0 auto 2px; opacity: 0; }
+.ex-rownum:hover .ex-del { opacity: 1; }
+.ex-cell-td { min-width: 150px; }
+.ex-cell {
+  width: 100%; height: 34px; border: 0; background: transparent; outline: none;
+  padding: 0 9px; font-size: 12.2px; color: var(--ink);
+}
+.ex-cell:hover { background: #fffdfa; }
+.ex-cell:focus { background: #fff; box-shadow: inset 0 0 0 2px rgba(232, 31, 118, .35); }
+.ex-files { width: 96px; min-width: 96px; padding: 3px 5px !important; white-space: nowrap; text-align: center; }
+.ex-files .act-btn { width: 26px; height: 26px; display: inline-grid; }
+.ex-files-th .ex-th-inner { justify-content: center; min-width: 96px; }
+.ex-empty td { padding: 26px 16px; text-align: center; color: var(--muted-2); font-size: 12px; }
+.excel-foot { display: flex; align-items: center; gap: 14px; padding: 9px 14px; border-top: 1px solid var(--line); background: #fdfaf6; flex-wrap: wrap; }
+.excel-foot .link-btn { font-size: 11.5px; }
+.excel-hint { font-size: 10.6px; color: var(--muted-2); display: inline-flex; align-items: center; gap: 5px; }
+.excel-hint svg { width: 12px; height: 12px; color: var(--pink); }
+
+/* ---------- login: manter conectado ---------- */
+.auth-remember { font-size: 11.8px; color: var(--muted); margin-top: 2px; }
+.auth-remember input { accent-color: var(--pink); }
+
+/* ---------- aviso de armazenamento ---------- */
+.storage-warning {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 500;
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+  padding: 8px 14px; background: #fdeceb; color: #a83227;
+  font-size: 11.8px; font-weight: 600; text-align: center;
+}
+.storage-warning svg { width: 14px; height: 14px; flex: none; }
+@media (max-width: 900px) {
+  .ex-del, .ex-rownum .ex-del { opacity: .55; }
+}
