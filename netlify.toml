@@ -1,0 +1,11 @@
+# Configuração do Netlify · site estático (sem build)
+[build]
+  publish = "."
+  command = ""
+
+# Garante que os arquivos do app sejam servidos com o tipo correto
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
