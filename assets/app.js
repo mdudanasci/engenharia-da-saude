@@ -539,6 +539,8 @@
     patientFilter: 'todos',
     techQuery: '',
     techFilter: 'ativos',
+    selectedPatients: new Set(),
+    selectedTechs: new Set(),
     importRows: [],
     importPatientId: null
   };
@@ -1042,6 +1044,12 @@
     if (q) list = list.filter((p) => [p.name, p.cpf, p.phone, p.plan, p.condition, p.city].join(' ').toLowerCase().includes(q));
     list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
+    const sel = state.selectedPatients;
+    const allSel = list.length > 0 && list.every((p) => sel.has(p.id));
+    const selCount = sel.size;
+    const selectedPatients = d.patients.filter((p) => sel.has(p.id));
+    const allActive = selectedPatients.length > 0 && selectedPatients.every((p) => p.status === 'ativo');
+
     const rows = list.map((p) => {
       const team = (p.technicianIds || []).map(getTech).filter(Boolean);
       const required = MODALITY[p.modality]?.techs || 2;
@@ -1052,6 +1060,7 @@
            <small class="${team.length === required ? 'ok' : 'warn'}">${team.length}/${required} técnicas</small>`
         : `<small class="warn">sem equipe</small>`;
       return `<tr data-action="view-patient" data-id="${p.id}">
+        <td class="check-col"><label class="check-wrap"><input type="checkbox" class="row-check" data-select-patient="${p.id}" ${sel.has(p.id) ? 'checked' : ''} /></label></td>
         <td>
           <div class="cell-person">${avatar(p.name)}
             <span class="who"><strong>${esc(p.name)}</strong>
@@ -1074,7 +1083,10 @@
     }).join('');
 
     const table = list.length ? `<div class="table-wrap"><table class="data">
-      <thead><tr><th>Paciente</th><th>Contato / convênio</th><th>Modalidade</th><th>Equipe</th><th>Escala do mês</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>
+      <thead><tr>
+        <th class="check-col"><label class="check-wrap"><input type="checkbox" class="select-all" data-select-all="patients" ${allSel ? 'checked' : ''} /></label></th>
+        <th>Paciente</th><th>Contato / convênio</th><th>Modalidade</th><th>Equipe</th><th>Escala do mês</th><th>Status</th><th style="text-align:right">Ações</th>
+      </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>` : emptyState({
       iconName: q ? 'search' : 'users',
@@ -1110,6 +1122,15 @@
         <span class="sum-pill">${list.length} exibido${list.length === 1 ? '' : 's'}</span>
       </div>
 
+      ${selCount ? `<div class="bulk-bar">
+        <span class="bulk-count"><b>${selCount}</b> selecionado${selCount === 1 ? '' : 's'}</span>
+        <button class="btn btn-ghost btn-sm" data-action="bulk-patients-export">${icon('download')} Exportar</button>
+        <button class="btn btn-ghost btn-sm" data-action="bulk-patients-status">${icon('check')} ${allActive ? 'Inativar' : 'Ativar'}</button>
+        <button class="btn btn-danger btn-sm" data-action="bulk-patients-delete">${icon('trash')} Excluir</button>
+        <span class="spacer"></span>
+        <button class="link-btn" data-action="clear-selection">Limpar seleção</button>
+      </div>` : ''}
+
       <section class="card">${table}</section>`;
   }
 
@@ -1126,11 +1147,18 @@
     if (q) list = list.filter((t) => [t.name, t.coren, t.cpf, t.phone, t.role, t.email].join(' ').toLowerCase().includes(q));
     list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
+    const sel = state.selectedTechs;
+    const allSel = list.length > 0 && list.every((t) => sel.has(t.id));
+    const selCount = sel.size;
+    const selectedTechs = d.technicians.filter((t) => sel.has(t.id));
+    const allActive = selectedTechs.length > 0 && selectedTechs.every((t) => t.status === 'ativo');
+
     const rows = list.map((t) => {
       const shifts = d.shifts.filter((s) => s.technicianId === t.id && s.date.startsWith(ym));
       const count = shifts.reduce((n, s) => n + weight(s.shift), 0);
       const patients = new Set(shifts.map((s) => s.patientId));
       return `<tr data-action="view-technician" data-id="${t.id}">
+        <td class="check-col"><label class="check-wrap"><input type="checkbox" class="row-check" data-select-tech="${t.id}" ${sel.has(t.id) ? 'checked' : ''} /></label></td>
         <td>
           <div class="cell-person">${avatar(t.name)}
             <span class="who"><strong>${esc(t.name)}</strong><small>${esc(t.role || 'Técnica de enfermagem')}</small></span>
@@ -1153,7 +1181,10 @@
     }).join('');
 
     const table = list.length ? `<div class="table-wrap"><table class="data">
-      <thead><tr><th>Técnica</th><th>COREN/RS</th><th>Contato</th><th>Valor plantão</th><th>Pacientes</th><th>Escala do mês</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead>
+      <thead><tr>
+        <th class="check-col"><label class="check-wrap"><input type="checkbox" class="select-all" data-select-all="techs" ${allSel ? 'checked' : ''} /></label></th>
+        <th>Técnica</th><th>COREN/RS</th><th>Contato</th><th>Valor plantão</th><th>Pacientes</th><th>Escala do mês</th><th>Status</th><th style="text-align:right">Ações</th>
+      </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>` : emptyState({
       iconName: q ? 'search' : 'id',
@@ -1186,6 +1217,15 @@
         <span class="spacer"></span>
         <span class="sum-pill">${list.length} exibida${list.length === 1 ? '' : 's'}</span>
       </div>
+
+      ${selCount ? `<div class="bulk-bar">
+        <span class="bulk-count"><b>${selCount}</b> selecionada${selCount === 1 ? '' : 's'}</span>
+        <button class="btn btn-ghost btn-sm" data-action="bulk-techs-export">${icon('download')} Exportar</button>
+        <button class="btn btn-ghost btn-sm" data-action="bulk-techs-status">${icon('check')} ${allActive ? 'Inativar' : 'Ativar'}</button>
+        <button class="btn btn-danger btn-sm" data-action="bulk-techs-delete">${icon('trash')} Excluir</button>
+        <span class="spacer"></span>
+        <button class="link-btn" data-action="clear-selection">Limpar seleção</button>
+      </div>` : ''}
 
       <section class="card">${table}</section>`;
   }
@@ -1878,6 +1918,67 @@
     });
   }
 
+  /* ---------- Ações em massa ---------- */
+  function bulkStatusPatients() {
+    const list = state.data.patients.filter((p) => state.selectedPatients.has(p.id));
+    if (!list.length) return;
+    const allActive = list.every((p) => p.status === 'ativo');
+    list.forEach((p) => { p.status = allActive ? 'inativo' : 'ativo'; });
+    state.selectedPatients.clear();
+    log('edit', `${list.length} paciente(s) ${allActive ? 'inativado(s)' : 'ativado(s)'}.`);
+    save(); render();
+    toast(allActive ? 'Pacientes inativados.' : 'Pacientes ativados.', 'info');
+  }
+
+  function bulkDeletePatients() {
+    const list = state.data.patients.filter((p) => state.selectedPatients.has(p.id));
+    if (!list.length) return;
+    const ids = new Set(list.map((p) => p.id));
+    confirmDialog({
+      title: `Excluir ${list.length} paciente(s)?`,
+      message: 'As fichas selecionadas e os plantões vinculados a elas serão removidos.',
+      onConfirm() {
+        state.data.patients = state.data.patients.filter((p) => !ids.has(p.id));
+        state.data.shifts = state.data.shifts.filter((s) => !ids.has(s.patientId));
+        if (ids.has(state.scalePatientId)) state.scalePatientId = state.data.patients[0]?.id || null;
+        state.selectedPatients.clear();
+        log('alert', `${list.length} paciente(s) removido(s).`);
+        save(); closeModal(); render();
+        toast('Pacientes excluídos.', 'info');
+      }
+    });
+  }
+
+  function bulkStatusTechs() {
+    const list = state.data.technicians.filter((t) => state.selectedTechs.has(t.id));
+    if (!list.length) return;
+    const allActive = list.every((t) => t.status === 'ativo');
+    list.forEach((t) => { t.status = allActive ? 'inativo' : 'ativo'; });
+    state.selectedTechs.clear();
+    log('edit', `${list.length} técnica(s) ${allActive ? 'inativada(s)' : 'ativada(s)'}.`);
+    save(); render();
+    toast(allActive ? 'Técnicas inativadas.' : 'Técnicas ativadas.', 'info');
+  }
+
+  function bulkDeleteTechs() {
+    const list = state.data.technicians.filter((t) => state.selectedTechs.has(t.id));
+    if (!list.length) return;
+    const ids = new Set(list.map((t) => t.id));
+    confirmDialog({
+      title: `Excluir ${list.length} técnica(s)?`,
+      message: 'As fichas selecionadas, seus plantões e vínculos com pacientes serão removidos.',
+      onConfirm() {
+        state.data.technicians = state.data.technicians.filter((t) => !ids.has(t.id));
+        state.data.shifts = state.data.shifts.filter((s) => !ids.has(s.technicianId));
+        state.data.patients.forEach((p) => { p.technicianIds = (p.technicianIds || []).filter((id) => !ids.has(id)); });
+        state.selectedTechs.clear();
+        log('alert', `${list.length} técnica(s) removida(s).`);
+        save(); closeModal(); render();
+        toast('Técnicas excluídas.', 'info');
+      }
+    });
+  }
+
   /* ---------- Configurações / notificações ---------- */
   function openSettings() {
     const d = state.data;
@@ -1951,21 +2052,39 @@
   }
 
   function exportPatients() {
+    writePatientsCsv(state.data.patients, `pacientes-engenharia-da-saude-${todayISO()}.csv`, 'CSV de pacientes exportado.');
+  }
+
+  function writePatientsCsv(list, filename, message) {
     const rows = [['Nome', 'CPF', 'Nascimento', 'Telefone', 'Convênio', 'Modalidade', 'Técnicas', 'Condição', 'Endereço', 'Status']];
-    state.data.patients.forEach((p) => rows.push([
+    list.forEach((p) => rows.push([
       p.name, p.cpf, p.birth, p.phone, p.plan, MODALITY[p.modality]?.label,
       (p.technicianIds || []).map((id) => getTech(id)?.name).filter(Boolean).join(' | '),
       p.condition, p.address, p.status
     ]));
-    download(`pacientes-engenharia-da-saude-${todayISO()}.csv`, csv(rows), 'text/csv;charset=utf-8');
-    toast('CSV de pacientes exportado.');
+    download(filename, csv(rows), 'text/csv;charset=utf-8');
+    if (message) toast(message);
+  }
+
+  function exportPatientsList(list) {
+    if (!list.length) return;
+    writePatientsCsv(list, `pacientes-selecionados-${todayISO()}.csv`, `${list.length} paciente(s) exportado(s).`);
   }
 
   function exportTechnicians() {
+    writeTechniciansCsv(state.data.technicians, `tecnicas-engenharia-da-saude-${todayISO()}.csv`, 'CSV de técnicas exportado.');
+  }
+
+  function writeTechniciansCsv(list, filename, message) {
     const rows = [['Nome', 'CPF', 'RG', 'Nascimento', 'COREN/RS', 'Função', 'Telefone', 'E-mail', 'Valor do plantão', 'Status']];
-    state.data.technicians.forEach((t) => rows.push([t.name, t.cpf, t.rg, t.birth, t.coren, t.role, t.phone, t.email, t.shiftValue, t.status]));
-    download(`tecnicas-engenharia-da-saude-${todayISO()}.csv`, csv(rows), 'text/csv;charset=utf-8');
-    toast('CSV de técnicas exportado.');
+    list.forEach((t) => rows.push([t.name, t.cpf, t.rg, t.birth, t.coren, t.role, t.phone, t.email, t.shiftValue, t.status]));
+    download(filename, csv(rows), 'text/csv;charset=utf-8');
+    if (message) toast(message);
+  }
+
+  function exportTechniciansList(list) {
+    if (!list.length) return;
+    writeTechniciansCsv(list, `tecnicas-selecionadas-${todayISO()}.csv`, `${list.length} técnica(s) exportada(s).`);
   }
 
   function exportScale() {
@@ -2105,6 +2224,14 @@
       go('scales');
     },
 
+    'bulk-patients-export': () => exportPatientsList(state.data.patients.filter((p) => state.selectedPatients.has(p.id))),
+    'bulk-patients-status': () => bulkStatusPatients(),
+    'bulk-patients-delete': () => bulkDeletePatients(),
+    'bulk-techs-export': () => exportTechniciansList(state.data.technicians.filter((t) => state.selectedTechs.has(t.id))),
+    'bulk-techs-status': () => bulkStatusTechs(),
+    'bulk-techs-delete': () => bulkDeleteTechs(),
+    'clear-selection': () => { state.selectedPatients.clear(); state.selectedTechs.clear(); render(); },
+
     'new-technician': () => openTechnicianForm(),
     'edit-technician': (el) => openTechnicianForm(getTech(el.dataset.id)),
     'view-technician': (el) => openTechnicianDetail(el.dataset.id),
@@ -2193,6 +2320,8 @@
   function go(view) {
     if (!VIEWS.includes(view)) view = 'dashboard';
     state.view = view;
+    state.selectedPatients.clear();
+    state.selectedTechs.clear();
     closeSearchPop();
     render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2251,6 +2380,8 @@
 
   /* ---------------- Eventos ---------------- */
   document.addEventListener('click', (e) => {
+    if (e.target.closest('.check-wrap, .select-all')) return;
+
     const nav = e.target.closest('[data-nav]');
     if (nav) { e.preventDefault(); go(nav.dataset.nav); return; }
 
@@ -2286,7 +2417,34 @@
   });
 
   document.addEventListener('change', (e) => {
-    if (e.target.id === 'scalePatient') { state.scalePatientId = e.target.value; render(); }
+    const t = e.target;
+    if (t.id === 'scalePatient') { state.scalePatientId = t.value; render(); return; }
+
+    if (t.dataset.selectPatient) {
+      if (t.checked) state.selectedPatients.add(t.dataset.selectPatient);
+      else state.selectedPatients.delete(t.dataset.selectPatient);
+      render();
+      return;
+    }
+    if (t.dataset.selectTech) {
+      if (t.checked) state.selectedTechs.add(t.dataset.selectTech);
+      else state.selectedTechs.delete(t.dataset.selectTech);
+      render();
+      return;
+    }
+    if (t.dataset.selectAll === 'patients') {
+      const ids = $$('[data-select-patient]').map((el) => el.dataset.selectPatient);
+      if (t.checked) ids.forEach((id) => state.selectedPatients.add(id));
+      else ids.forEach((id) => state.selectedPatients.delete(id));
+      render();
+      return;
+    }
+    if (t.dataset.selectAll === 'techs') {
+      const ids = $$('[data-select-tech]').map((el) => el.dataset.selectTech);
+      if (t.checked) ids.forEach((id) => state.selectedTechs.add(id));
+      else ids.forEach((id) => state.selectedTechs.delete(id));
+      render();
+    }
   });
 
   document.addEventListener('keydown', (e) => {
