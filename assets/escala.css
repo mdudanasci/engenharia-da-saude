@@ -274,3 +274,20 @@ table.sheet tfoot .col-tech { padding-left: 10px !important; font-size: 11px; te
   margin: 14px 0 6px; padding-top: 10px; border-top: 1px solid var(--line-soft);
   font-size: 9.4px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted-2);
 }
+/* ---------- selecao em massa nas listas ---------- */
+.check-col { width: 44px; }
+table.data th.check-col, table.data td.check-col { padding-left: 16px !important; padding-right: 0 !important; width: 44px; }
+.check-wrap { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; cursor: pointer; border-radius: 7px; }
+.check-wrap:hover { background: var(--cream-2); }
+.check-wrap input, .select-all {
+  width: 16px; height: 16px; accent-color: var(--pink); cursor: pointer; margin: 0;
+}
+.bulk-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 12px; margin-bottom: 12px; box-shadow: var(--shadow-xs);
+  animation: popIn .18s cubic-bezier(.2, .9, .25, 1) both;
+}
+.bulk-count { font-size: 12px; color: var(--muted); font-weight: 600; }
+.bulk-count b { color: var(--ink); font-size: 13px; }
+.bulk-bar .btn { height: 32px; }
